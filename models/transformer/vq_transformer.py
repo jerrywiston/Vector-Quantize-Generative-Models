@@ -1,3 +1,6 @@
+"""
+References: https://github.com/dome272/VQGAN-pytorch/blob/main/transformer.py
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,8 +8,8 @@ from nanogpt import GPT, GPTConfig
 from transformer_encdec import TransformerEncoder, TransformerDecoder
 from vqvae.vqvae import VQVAE
 
-# Can be conditioned or unconditioned, the condition part also utilize causal attention
-class ImgTransformer(nn.Module):
+# Can be conditioned or unconditioned, apply causal attention to handle the condition part.
+class VQTransformer(nn.Module):
     def __init__(self, transformer_config, vqmodel, vqmodel_cond=None, vq_size=(16,16), sos_token=0, n_embeddings=256, embedding_dim=3, pkeep=0.5):
         super().__init__()
         self.sos_token = sos_token
@@ -93,7 +96,7 @@ class ImgTransformer(nn.Module):
         return x
 
 # Conditional Generation based on Transformer Encoder-Decoder Architecture
-class ImgTransformerEncDec(nn.Module):
+class VQTransformerEncDec(nn.Module):
     def __init__(self, transformer_enc_config, vqmodel_cond, transformer_dec_config, vqmodel, vq_size=(16,16), sos_token=0, n_embeddings=256, embedding_dim=3, pkeep=0.5):
         super().__init__()
         self.sos_token = sos_token
@@ -175,3 +178,4 @@ class ImgTransformerEncDec(nn.Module):
         self.transformer_enc.train()
         self.transformer_dec.train()
         return x
+    

@@ -14,7 +14,7 @@ import torchvision.utils as vutils
 from models.vqvae import vqvae
 import utils
 
-from models.transformer.transformer_re import ImgTransformer
+from models.transformer.vq_transformer import ImgTransformer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

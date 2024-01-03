@@ -1,3 +1,7 @@
+"""
+Full Encoder-Decoder architecture based on the code of nanoGPT.
+References: https://arxiv.org/abs/1706.03762 (Attention is All You Need)
+"""
 from nanogpt import *
 
 class SelfAttention(nn.Module):
@@ -152,12 +156,6 @@ class TransformerEncoder(nn.Module):
         print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))
 
     def get_num_params(self, non_embedding=True):
-        """
-        Return the number of parameters in the model.
-        For non-embedding count (default), the position embeddings get subtracted.
-        The token embeddings would too, except due to the parameter sharing these
-        params are actually used as weights in the final layer, so we include them.
-        """
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
             n_params -= self.transformer.wpe.weight.numel()
@@ -187,17 +185,6 @@ class TransformerEncoder(nn.Module):
             out_layers.append(x)
 
         return out_layers
-
-    def crop_block_size(self, block_size):
-        # model surgery to decrease the block size if necessary
-        # e.g. we may load the GPT2 pretrained model checkpoint (block size 1024)
-        # but want to use a smaller block size for some smaller, simpler model
-        assert block_size <= self.config.block_size
-        self.config.block_size = block_size
-        self.transformer.wpe.weight = nn.Parameter(self.transformer.wpe.weight[:block_size])
-        for block in self.transformer.h:
-            if hasattr(block.attn, 'bias'):
-                block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
         # start with all of the candidate parameters
@@ -256,10 +243,6 @@ class TransformerDecoder(nn.Module):
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        # with weight tying when using torch.compile() some warnings get generated:
-        # "UserWarning: functional_call was passed multiple values for tied weights.
-        # This behavior is deprecated and will be an error in future versions"
-        # not 100% sure what this is, so far seems to be harmless. TODO investigate
         self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
 
         # init all weights
@@ -273,12 +256,6 @@ class TransformerDecoder(nn.Module):
         print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))
 
     def get_num_params(self, non_embedding=True):
-        """
-        Return the number of parameters in the model.
-        For non-embedding count (default), the position embeddings get subtracted.
-        The token embeddings would too, except due to the parameter sharing these
-        params are actually used as weights in the final layer, so we include them.
-        """
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
             n_params -= self.transformer.wpe.weight.numel()
@@ -317,17 +294,6 @@ class TransformerDecoder(nn.Module):
             loss = None
 
         return logits, loss
-
-    def crop_block_size(self, block_size):
-        # model surgery to decrease the block size if necessary
-        # e.g. we may load the GPT2 pretrained model checkpoint (block size 1024)
-        # but want to use a smaller block size for some smaller, simpler model
-        assert block_size <= self.config.block_size
-        self.config.block_size = block_size
-        self.transformer.wpe.weight = nn.Parameter(self.transformer.wpe.weight[:block_size])
-        for block in self.transformer.h:
-            if hasattr(block.attn, 'bias'):
-                block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
         # start with all of the candidate parameters
@@ -397,3 +363,4 @@ class TransformerDecoder(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)
 
         return idx
+    

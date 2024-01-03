@@ -20,7 +20,7 @@ env = maze_env.MazeBaseEnv(maze_obj, render_res=(64,64), fov=80*np.pi/180)
 
 # Training Parameters
 max_training_iter = 100001#20000
-gen_data_size = 40
+gen_data_size = 80
 gen_dataset_iter = 1000
 samp_field = 3.0
 batch_size = 32

@@ -14,7 +14,7 @@ import torchvision.utils as vutils
 from models.vqvae import vqvae
 import utils
 
-from models.transformer.transformer_re import ImgTransformer
+from models.transformer.vq_transformer import VQTransformer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -51,12 +51,12 @@ transformer_config = {
     "n_head": 16,
     "n_embd": 512
 }
-vqtransformer = ImgTransformer(transformer_config, vq_net, vq_net_cond, n_embeddings=n_embeddings, embedding_dim=embedding_dim).to(device)
+vqtransformer = VQTransformer(transformer_config, vq_net, vq_net_cond, n_embeddings=n_embeddings, embedding_dim=embedding_dim).to(device)
 optimizer = vqtransformer.transformer.configure_optimizers(weight_decay=0.01, learning_rate=4.5e-06, betas=(0.9, 0.95), device_type=device)
 
 # Training Parameters
 max_training_iter = 200001
-gen_data_size = 40
+gen_data_size = 80
 gen_dataset_iter = 1000
 samp_field = 3.0
 batch_size = 32

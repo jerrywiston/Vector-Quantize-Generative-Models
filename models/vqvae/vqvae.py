@@ -1,11 +1,12 @@
+"""
+taken from: https://github.com/karpathy/deep-vector-quantization/blob/main/dvq/model/deepmind_enc_dec.py
+"""
+
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
 from codebook import Codebook
 
-# Reference of Model Architecture :
-# https://github.com/karpathy/deep-vector-quantization/blob/main/dvq/model/deepmind_enc_dec.py
-# ---------------------------------------------------------------------------------------------
 class ResBlock(nn.Module):
     def __init__(self, input_channels, channel):
         super().__init__()

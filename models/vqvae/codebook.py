@@ -1,4 +1,7 @@
-# https://github.com/dome272/VQGAN-pytorch/blob/main/codebook.py
+"""
+taken from: https://github.com/dome272/VQGAN-pytorch/blob/main/codebook.py
+"""
+
 import torch
 import torch.nn as nn
 

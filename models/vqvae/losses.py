@@ -75,32 +75,14 @@ class Discriminator(nn.Module):
         #self.res3 = ResBlock(ndf*2, ndf*4, bn=False)
         self.res3 = ResBlock(ndf*2, ndf*4, bn=False)
         self.conv_out = nn.Conv2d(in_channels=ndf*4, out_channels=1, kernel_size=1, stride=1, padding=0)
-        """
-        self.pool3 = nn.MaxPool2d(2, stride=2)
-        # (16,16,256) -> (8,8,512)
-        self.res4 = ResBlock(ndf*4, ndf*4, bn=False)
-        self.pool4 = nn.MaxPool2d(2, stride=2)
-        # (4*4*1024 -> 1)
-        self.fc5 = nn.Linear(4*4*ndf*4, 1)
-        """
 
     def forward(self, x):
-        # Res Block x6
         h_res1 = self.res1(x)
         h_pool1 = self.pool1(h_res1)
         h_res2 = self.res2(h_pool1)
         h_pool2 = self.pool2(h_res2)
         h_res3 = self.res3(h_pool2)
         out = self.conv_out(h_res3)
-        """
-        h_pool3 = self.pool3(h_res3)
-        h_res4 = self.res4(h_pool3)
-        h_pool4 = self.pool4(h_res4)
-        # Fully Connected
-        d_logit = self.fc5(h_pool4.view(-1,self.ndf*4*4*4))
-        d_prob = torch.sigmoid(d_logit)
-        return d_prob, d_logit
-        """
         return torch.sigmoid(out), out
     
 def patch_discriminator_loss(disc, x_fake, x_real):
