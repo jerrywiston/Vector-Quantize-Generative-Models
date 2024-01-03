@@ -14,7 +14,7 @@ import torchvision.utils as vutils
 from models.vqvae import vqvae
 import utils
 
-from models.transformer.vq_transformer import ImgTransformer
+from models.transformer.vq_transformer import VQTransformer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -22,18 +22,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 maze_obj = maze.MazeGridRandom2(obj_prob=0.3)
 env = maze_env.MazeBaseEnv(maze_obj, render_res=(64,64), fov=80*np.pi/180)
 
-# VQVAE Model Parameters
+# VQVAE Model
 h_dim = 128
-
-#n_embeddings = 256
-#embedding_dim = 3
-#vqmodel_path = "vqvae2.pt"
-
 n_embeddings = 1024
 embedding_dim = 8
-vqmodel_path = "vqvae_new.pt"
-
-# VQVAE Model
+vqmodel_path = "vqvae.pt"
 vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
 vq_net.load_state_dict(torch.load(os.path.join("checkpoints",vqmodel_path)))
 
@@ -45,20 +38,25 @@ transformer_config = {
     "n_head": 16,
     "n_embd": 512
 }
-vqtransformer = ImgTransformer(transformer_config, vq_net, n_embeddings=n_embeddings, embedding_dim=embedding_dim).to(device)
+vqtransformer = VQTransformer(transformer_config, vq_net, n_embeddings=n_embeddings, embedding_dim=embedding_dim).to(device)
 optimizer = vqtransformer.transformer.configure_optimizers(weight_decay=0.01, learning_rate=4.5e-06, betas=(0.9, 0.95), device_type=device)
 
 # Training Parameters
 max_training_iter = 200001
-gen_data_size = 40
+gen_data_size = 80
 gen_dataset_iter = 1000
 samp_field = 3.0
 batch_size = 32
 
-output_path = "output_transformer_re/"
 save_path = "checkpoints"
-if not os.path.exists(output_path):
-    os.mkdir(output_path)
+exp_path = "experiments"
+model_name = "transformer"
+results_path = os.path.join(exp_path, model_name)
+
+if not os.path.exists(exp_path):
+    os.makedirs(exp_path)
+if not os.path.exists(results_path):
+    os.mkdir(os.path.join(results_path))
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
@@ -74,7 +72,6 @@ for iter in range(max_training_iter):
     # Train Transformer
     optimizer.zero_grad()
     logits, loss = vqtransformer(x_obs)
-    #loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
     loss.backward()
     optimizer.step()
 
@@ -85,9 +82,9 @@ for iter in range(max_training_iter):
         with torch.no_grad():
             x_samp = vqtransformer.sample(samp_size=32)
             x_fig = (x_samp.flip(1).cpu() + 1) / 2
-            path = os.path.join(output_path, str(iter).zfill(4)+".jpg")
+            path = os.path.join(results_path, str(iter).zfill(4)+".jpg")
             vutils.save_image(x_fig, path, padding=2, normalize=False)
 
             # Save model
-            torch.save(vqtransformer.state_dict(), os.path.join(save_path,"transformer.pt"))
+            torch.save(vqtransformer.state_dict(), os.path.join(save_path, model_name+".pt"))
         

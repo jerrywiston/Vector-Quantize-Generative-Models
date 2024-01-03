@@ -40,7 +40,7 @@ optimizer = optim.Adam(net.parameters(), lr=1e-4, amsgrad=True)
 optimizer_disc = optim.Adam(disc.parameters(), lr=1e-4, amsgrad=True)
 
 save_path = "checkpoints"
-exp_path = "experiments/"
+exp_path = "experiments"
 model_name = "vqvae"
 results_path = os.path.join(exp_path, model_name)
 

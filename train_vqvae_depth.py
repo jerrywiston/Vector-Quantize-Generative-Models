@@ -28,8 +28,8 @@ batch_size = 32
 # Model Parameters
 config = {
     "h_dim": 128,
-    "n_embeddings": 1024, #256
-    "embedding_dim": 8, #3
+    "n_embeddings": 512, #256
+    "embedding_dim": 4, #3
     "input_channels": 1,
 }
 
@@ -40,7 +40,7 @@ optimizer = optim.Adam(net.parameters(), lr=1e-4, amsgrad=True)
 optimizer_disc = optim.Adam(disc.parameters(), lr=1e-4, amsgrad=True)
 
 save_path = "checkpoints"
-exp_path = "experiments/"
+exp_path = "experiments"
 model_name = "vqvae_depth"
 results_path = os.path.join(exp_path, model_name)
 

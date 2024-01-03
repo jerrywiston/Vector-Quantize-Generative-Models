@@ -22,24 +22,18 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 maze_obj = maze.MazeGridRandom2(obj_prob=0.3)
 env = maze_env.MazeBaseEnv(maze_obj, render_res=(64,64), fov=80*np.pi/180)
 
-# VQVAE Model Parameters
-h_dim = 128
-
-#n_embeddings = 256
-#embedding_dim = 3
-#vqmodel_path = "vqvae2.pt"
-
 # VQVAE Model
+h_dim = 128
 n_embeddings = 1024
 embedding_dim = 8
-vqmodel_path = "vqvae_new.pt"
+vqmodel_path = "vqvae.pt"
 vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
 vq_net.load_state_dict(torch.load(os.path.join("checkpoints",vqmodel_path)))
 
 # Conditional Encoder
 cond_h_dim = 128
-cond_n_embeddings = 256
-cond_embedding_dim = 3
+cond_n_embeddings = 512
+cond_embedding_dim = 4
 vq_net_cond = vqvae.VQVAE(cond_h_dim, cond_n_embeddings, cond_embedding_dim, input_channels=1).to(device)
 vq_net_cond.load_state_dict(torch.load(os.path.join("checkpoints","vqvae_depth.pt")))
 
@@ -61,18 +55,24 @@ gen_dataset_iter = 1000
 samp_field = 3.0
 batch_size = 32
 
-output_path = "output_transformer_cond/"
 save_path = "checkpoints"
-if not os.path.exists(output_path):
-    os.mkdir(output_path)
+exp_path = "experiments"
+model_name = "transformer_cond"
+results_path = os.path.join(exp_path, model_name)
+
+if not os.path.exists(exp_path):
+    os.makedirs(exp_path)
+if not os.path.exists(results_path):
+    os.mkdir(os.path.join(results_path))
 if not os.path.exists(save_path):
     os.mkdir(save_path)
-if os.path.exists(os.path.join(save_path,"transformer.pt")):
+
+if os.path.exists(os.path.join(save_path,"transformer_cond.pt")):
     print("Load trained weights ...")
     vqtransformer.load_state_dict(torch.load(os.path.join(save_path,"transformer_cond.pt")))
 
 # Training Iteration
-for iter in range(73000, max_training_iter):
+for iter in range(max_training_iter):
     if iter % gen_dataset_iter == 0:
         color_data, depth_data, pose_data = gen_dataset(env, gen_data_size, samp_range=samp_field, samp_size=10)
         color_data = (color_data.astype(float) / 255.)*2-1
@@ -97,9 +97,9 @@ for iter in range(73000, max_training_iter):
             gt_fig = (x_obs.flip(1).cpu() + 1) / 2
             depth_fig = depth_obs.repeat(1,3,1,1).cpu()
             out_fig = torch.cat([depth_fig[0:8], x_fig[0:8], gt_fig[0:8], depth_fig[8:16], x_fig[8:16], gt_fig[8:16]], 0)
-            path = os.path.join(output_path, str(iter).zfill(4)+".jpg")
+            path = os.path.join(results_path, str(iter).zfill(4)+".jpg")
             vutils.save_image(out_fig, path, padding=2, normalize=False)
 
             # Save model
-            torch.save(vqtransformer.state_dict(), os.path.join(save_path,"transformer_cond.pt"))
+            torch.save(vqtransformer.state_dict(), os.path.join(save_path, model_name+".pt"))
         
