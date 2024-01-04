@@ -49,7 +49,7 @@ vqtransformer = VQTransformer(transformer_config, vq_net, vq_net_cond, n_embeddi
 optimizer = vqtransformer.transformer.configure_optimizers(weight_decay=0.01, learning_rate=4.5e-06, betas=(0.9, 0.95), device_type=device)
 
 # Training Parameters
-max_training_iter = 200001
+max_training_iter = 100001
 gen_data_size = 80
 gen_dataset_iter = 1000
 samp_field = 3.0

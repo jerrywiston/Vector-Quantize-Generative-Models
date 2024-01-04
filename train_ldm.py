@@ -10,10 +10,10 @@ import torch.optim as optim
 import torchvision.utils as vutils
 
 from models.vqvae import vqvae
-import utils
-
 from models.diffusion.unet import UNet
 from models.diffusion.core import GaussianDiffusionTrainer, DDPMSampler, DDIMSampler
+
+import utils
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -51,7 +51,7 @@ sampler = DDIMSampler(diff_net, **diff_config).to(device)
 #sampler = DDPMSampler(diff_net, **diff_config).to(device)
 
 # Training Parameters
-max_training_iter = 100000
+max_training_iter = 100001
 gen_data_size = 80
 gen_dataset_iter = 1000
 samp_field = 3.0

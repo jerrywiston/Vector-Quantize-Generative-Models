@@ -10,11 +10,11 @@ import torch.optim as optim
 import torchvision.utils as vutils
 
 from models.vqvae import vqvae
-import utils
-
 from models.diffusion.cond_encoder import Encoder
 from models.diffusion.unet import UNet
 from models.diffusion.core import GaussianDiffusionTrainer, DDPMSampler, DDIMSampler
+
+import utils
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -24,8 +24,8 @@ env = maze_env.MazeBaseEnv(maze_obj, render_res=(64,64), fov=80*np.pi/180)
 
 # VQVAE Model 
 h_dim = 128
-n_embeddings = 1024#256
-embedding_dim = 8#3
+n_embeddings = 1024
+embedding_dim = 8
 vqmodel_path = "vqvae.pt"
 vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
 vq_net.load_state_dict(torch.load(os.path.join("checkpoints", vqmodel_path)))
@@ -56,7 +56,7 @@ sampler = DDIMSampler(diff_net, **diff_config).to(device)
 #sampler = DDPMSampler(diff_net, **diff_config).to(device)
 
 # Training Parameters
-max_training_iter = 200000
+max_training_iter = 100001
 gen_data_size = 80
 gen_dataset_iter = 1000
 samp_field = 3.0

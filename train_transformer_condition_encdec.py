@@ -12,9 +12,9 @@ import torch.optim as optim
 import torchvision.utils as vutils
 
 from models.vqvae import vqvae
-import utils
-
 from models.transformer.vq_transformer import VQTransformerEncDec
+
+import utils
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -56,7 +56,7 @@ vqtransformer = VQTransformerEncDec(transformer_enc_config, vq_net_cond, transfo
 optimizer = vqtransformer.transformer_dec.configure_optimizers(weight_decay=0.01, learning_rate=4.5e-06, betas=(0.9, 0.95), device_type=device)
 
 # Training Parameters
-max_training_iter = 200001
+max_training_iter = 100001
 gen_data_size = 80
 gen_dataset_iter = 1000
 samp_field = 3.0
