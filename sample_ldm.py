@@ -9,7 +9,7 @@ from models.vqvae import vqvae
 import utils
 
 from models.diffusion.modules.UNet import UNet
-from models.diffusion.engine import DDPMSampler, DDIMSampler
+from models.diffusion.core import DDPMSampler, DDIMSampler
 from models.diffusion.utils import load_yaml
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

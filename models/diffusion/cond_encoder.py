@@ -44,29 +44,9 @@ class Encoder(nn.Module):
         )
         self.proj = nn.Conv2d(n_hid, embedding_dim-2, 1)
 
-    def forward(self, x):
+    def forward(self, x, add_pos=True):
         h = self.net(x)
         z = self.proj(h)
-        out = AddPosEmb()(z)
-        return out
-
-class EncoderX(nn.Module):
-    def __init__(self, input_channels=3, embedding_dim=3, n_hid=64):
-        super().__init__()
-
-        self.net = nn.Sequential(
-            nn.Conv2d(input_channels, n_hid, 4, stride=2, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(n_hid, 2*n_hid, 4, stride=2, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(2*n_hid, 2*n_hid, 3, padding=1),
-            nn.ReLU(),
-            ResBlock(2*n_hid, 2*n_hid//4),
-            ResBlock(2*n_hid, 2*n_hid//4),
-        )
-        self.proj = nn.Conv2d(2*n_hid, embedding_dim, 1)
-
-    def forward(self, x):
-        h = self.net(x)
-        z = self.proj(h)
+        if add_pos:
+            z = AddPosEmb()(z)
         return z

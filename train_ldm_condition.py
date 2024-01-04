@@ -12,10 +12,9 @@ import torchvision.utils as vutils
 from models.vqvae import vqvae
 import utils
 
-from models.diffusion.modules.CondUNet import UNet, CondUNet
-from models.diffusion.modules.CondEncoder import Encoder
-from models.diffusion.engine import CondGaussianDiffusionTrainer, CondDDPMSampler, CondDDIMSampler
-from models.diffusion.utils import load_yaml
+from models.diffusion.cond_encoder import Encoder
+from models.diffusion.unet import UNet
+from models.diffusion.core import GaussianDiffusionTrainer, DDPMSampler, DDIMSampler
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -23,25 +22,37 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 maze_obj = maze.MazeGridRandom2(obj_prob=0.3)
 env = maze_env.MazeBaseEnv(maze_obj, render_res=(64,64), fov=80*np.pi/180)
 
-# VQVAE Model Parameters
+# VQVAE Model 
 h_dim = 128
-n_embeddings = 256
-embedding_dim = 3
-
-# VQVAE Model
+n_embeddings = 1024#256
+embedding_dim = 8#3
+vqmodel_path = "vqvae.pt"
 vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
-vq_net.load_state_dict(torch.load(os.path.join("checkpoints","vqvae2.pt")))
+vq_net.load_state_dict(torch.load(os.path.join("checkpoints", vqmodel_path)))
 
 # Conditional Encoder
 cond_dim = 64
 cond_net = Encoder(input_channels=1, embedding_dim=cond_dim).to(device)
 # Diffusion Model
-config = load_yaml("config_ldm.yml", encoding="utf-8")
-diff_net = CondUNet(**config["Model"], context_channels=cond_dim).to(device)
-optimizer = optim.AdamW(list(diff_net.parameters())+list(cond_net.parameters()), lr=0.0002, weight_decay=1e-4)
-trainer = CondGaussianDiffusionTrainer(diff_net, **config["Trainer"]).to(device)
+unet_config = {
+    "in_channels": 8,
+    "out_channels": 8,
+    "model_channels": 128,
+    "attention_resolutions": [1, 2, ],
+    "num_res_blocks": 2,
+    "dropout": 0.1,
+    "channel_mult": [1, 2, 2, 2],
+    "conv_resample": True,
+    "num_heads": 4
+}
+diff_config = {"T": 1000, "beta": [0.0001, 0.02]}
+
+diff_net = UNet(**unet_config, context_channels=cond_dim).to(device)
+optimizer = optim.AdamW(diff_net.parameters(), lr=0.0002, weight_decay=1e-4)
+trainer = GaussianDiffusionTrainer(diff_net, **diff_config).to(device)
 trainer.train()
-sampler = CondDDIMSampler(diff_net, beta=[0.0001, 0.02], T=1000).to(device)
+sampler = DDIMSampler(diff_net, **diff_config).to(device)
+#sampler = DDPMSampler(diff_net, **diff_config).to(device)
 
 # Training Parameters
 max_training_iter = 200000
@@ -50,10 +61,15 @@ gen_dataset_iter = 1000
 samp_field = 3.0
 batch_size = 32
 
-output_path = "output_ldm_cond/"
 save_path = "checkpoints"
-if not os.path.exists(output_path):
-    os.mkdir(output_path)
+exp_path = "experiments"
+model_name = "ldm_cond"
+results_path = os.path.join(exp_path, model_name)
+
+if not os.path.exists(exp_path):
+    os.makedirs(exp_path)
+if not os.path.exists(results_path):
+    os.mkdir(os.path.join(results_path))
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
@@ -88,9 +104,10 @@ for iter in range(max_training_iter):
             gt_fig = (x_obs.flip(1).cpu() + 1) / 2
             depth_fig = depth_obs.repeat(1,3,1,1).cpu()
             out_fig = torch.cat([depth_fig[0:8], x_fig[0:8], gt_fig[0:8], depth_fig[8:16], x_fig[8:16], gt_fig[8:16]], 0)
-            path = os.path.join(output_path, str(iter).zfill(4)+".jpg")
+            path = os.path.join(results_path, str(iter).zfill(4)+".jpg")
             vutils.save_image(out_fig, path, padding=2, normalize=False)
 
             # Save model
-            torch.save(diff_net.state_dict(), os.path.join(save_path,"ldm_cond.pt"))
+            torch.save(diff_net.state_dict(), os.path.join(save_path, model_name+".pt"))
+            torch.save(cond_net.state_dict(), os.path.join(save_path, model_name+"_condnet.pt"))
         

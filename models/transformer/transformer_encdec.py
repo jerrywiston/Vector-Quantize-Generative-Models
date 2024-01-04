@@ -1,6 +1,6 @@
 """
-Full Encoder-Decoder architecture based on the code of nanoGPT.
-References: https://arxiv.org/abs/1706.03762 (Attention is All You Need)
+Based on the code of nanoGPT (https://github.com/karpathy/nanoGPT)
+Full transformer Encoder-Decoder architecture (https://arxiv.org/abs/1706.03762) 
 """
 from nanogpt import *
 

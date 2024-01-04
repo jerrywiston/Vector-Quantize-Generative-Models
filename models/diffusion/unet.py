@@ -1,10 +1,14 @@
+"""
+taken from: https://github.com/Alokia/diffusion-DDIM-pytorch
+Add cross-attention for condition generation (https://arxiv.org/abs/2112.10752)
+"""
+
 import math
 import torch
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
 from abc import ABC, abstractmethod
-
 
 # use sinusoidal position embedding to encode time step (https://arxiv.org/abs/1706.03762)
 def timestep_embedding(timesteps, dim, max_period=10000):
@@ -46,10 +50,12 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     support it as an extra input.
     """
 
-    def forward(self, x, emb):
+    def forward(self, x, emb, context):
         for layer in self:
             if isinstance(layer, TimestepBlock):
                 x = layer(x, emb)
+            elif isinstance(layer, CrossAttentionBlock):
+                x = layer(x, context)
             else:
                 x = layer(x)
         return x
@@ -122,7 +128,6 @@ class AttentionBlock(nn.Module):
         h = self.proj(h)
         return h + x
 
-
 # upsample
 class Upsample(nn.Module):
     def __init__(self, channels, use_conv):
@@ -151,6 +156,31 @@ class Downsample(nn.Module):
     def forward(self, x):
         return self.op(x)
 
+class CrossAttentionBlock(nn.Module):
+    def __init__(self, channels, cond_channels, num_heads=1):
+        super().__init__()
+        self.num_heads = num_heads
+        assert channels % num_heads == 0
+
+        self.norm = norm_layer(channels)
+        self.q_linear = nn.Conv2d(channels, channels, kernel_size=1, bias=False)
+        self.kv_linear = nn.Conv2d(cond_channels, channels*2, kernel_size=1, bias=False)
+        self.proj = nn.Conv2d(channels, channels, kernel_size=1)
+
+    def forward(self, x, c):
+        B, C, H, W = x.shape
+        Bc, Cc, Hc, Wc = c.shape
+        q = self.q_linear(self.norm(x))
+        kv = self.kv_linear(c)
+        k, v = kv.reshape(B * self.num_heads, -1, Hc * Wc).chunk(2, dim=1)
+        q = q.reshape(B * self.num_heads, -1, H*W)
+        scale = 1. / math.sqrt(math.sqrt(C // self.num_heads))
+        attn = torch.einsum("bct,bcs->bts", q * scale, k * scale)
+        attn = attn.softmax(dim=-1)
+        h = torch.einsum("bts,bcs->bct", attn, v)
+        h = h.reshape(B, -1, H, W)
+        h = self.proj(h)
+        return h + x
 
 # The full UNet model with attention and timestep embedding
 class UNet(nn.Module):
@@ -164,7 +194,8 @@ class UNet(nn.Module):
             dropout=0,
             channel_mult=(1, 2, 2, 2),
             conv_resample=True,
-            num_heads=4
+            num_heads=4,
+            context_channels=None,
     ):
         super().__init__()
 
@@ -177,6 +208,7 @@ class UNet(nn.Module):
         self.channel_mult = channel_mult
         self.conv_resample = conv_resample
         self.num_heads = num_heads
+        self.context_channels = context_channels
 
         # time embedding
         time_embed_dim = model_channels * 4
@@ -196,11 +228,14 @@ class UNet(nn.Module):
         for level, mult in enumerate(channel_mult):
             for _ in range(num_res_blocks):
                 layers = [
-                    ResidualBlock(ch, mult * model_channels, time_embed_dim, dropout)
+                    ResidualBlock(ch, mult * model_channels, time_embed_dim, dropout),
                 ]
                 ch = mult * model_channels
                 if ds in attention_resolutions:
-                    layers.append(AttentionBlock(ch, num_heads=num_heads))
+                    if context_channels is not None:
+                        layers.append(CrossAttentionBlock(ch, context_channels, num_heads=self.num_heads))
+                    else:
+                        layers.append(AttentionBlock(ch, num_heads=num_heads))
                 self.down_blocks.append(TimestepEmbedSequential(*layers))
                 down_block_chans.append(ch)
             if level != len(channel_mult) - 1:  # don't use downsample for the last stage
@@ -211,7 +246,8 @@ class UNet(nn.Module):
         # middle block
         self.middle_block = TimestepEmbedSequential(
             ResidualBlock(ch, ch, time_embed_dim, dropout),
-            AttentionBlock(ch, num_heads=num_heads),
+            AttentionBlock(ch, num_heads=num_heads) if context_channels is None \
+                else CrossAttentionBlock(ch, context_channels, num_heads=self.num_heads),
             ResidualBlock(ch, ch, time_embed_dim, dropout)
         )
 
@@ -229,7 +265,11 @@ class UNet(nn.Module):
                 ]
                 ch = model_channels * mult
                 if ds in attention_resolutions:
-                    layers.append(AttentionBlock(ch, num_heads=num_heads))
+                    if context_channels is not None:
+                        layers.append(CrossAttentionBlock(ch, context_channels, num_heads=self.num_heads))
+                    else:
+                        layers.append(AttentionBlock(ch, num_heads=num_heads))
+                    #layers.append(AttentionBlock(ch, num_heads=num_heads))
                 if level and i == num_res_blocks:
                     layers.append(Upsample(ch, conv_resample))
                     ds //= 2
@@ -241,7 +281,7 @@ class UNet(nn.Module):
             nn.Conv2d(model_channels, out_channels, kernel_size=3, padding=1),
         )
 
-    def forward(self, x, timesteps):
+    def forward(self, x, timesteps=None, context=None):
         """
         Apply the model to an input batch.
         :param x: an [N x C x H x W] Tensor of inputs.
@@ -255,12 +295,143 @@ class UNet(nn.Module):
         # down stage
         h = x
         for module in self.down_blocks:
-            h = module(h, emb)
+            h = module(h, emb, context)
             hs.append(h)
         # middle stage
-        h = self.middle_block(h, emb)
+        h = self.middle_block(h, emb, context)
         # up stage
         for module in self.up_blocks:
             cat_in = torch.cat([h, hs.pop()], dim=1)
-            h = module(cat_in, emb)
+            h = module(cat_in, emb, context)
+        return self.out(h)
+
+
+# UNet model with conditional feature concatenation (used for Img2Img generation)
+class UNetCat(nn.Module):
+    def __init__(
+            self,
+            in_channels=3,
+            model_channels=128,
+            out_channels=3,
+            num_res_blocks=2,
+            attention_resolutions=(8, 16),
+            dropout=0,
+            channel_mult=(1, 2, 2, 2),
+            conv_resample=True,
+            num_heads=4,
+            context_channels=64,
+            gn_channels=32
+    ):
+        super().__init__()
+
+        self.in_channels = in_channels
+        self.model_channels = model_channels
+        self.out_channels = out_channels
+        self.num_res_blocks = num_res_blocks
+        self.attention_resolutions = attention_resolutions
+        self.dropout = dropout
+        self.channel_mult = channel_mult
+        self.conv_resample = conv_resample
+        self.num_heads = num_heads
+        self.context_channels = context_channels
+        self.gn_channels = gn_channels
+
+        # time embedding
+        time_embed_dim = model_channels * 4
+        self.time_embed = nn.Sequential(
+            nn.Linear(model_channels, time_embed_dim),
+            nn.SiLU(),
+            nn.Linear(time_embed_dim, time_embed_dim),
+        )
+
+        # down blocks
+        self.down_blocks = nn.ModuleList([
+            TimestepEmbedSequential(nn.Conv2d(in_channels, model_channels, kernel_size=3, padding=1))
+        ])
+        down_block_chans = [model_channels]
+        self.add_cond_list = [True]
+        ch = model_channels
+        ds = 1
+        for level, mult in enumerate(channel_mult):
+            for _ in range(num_res_blocks):
+                layers = [
+                    ResidualBlock(ch + gn_channels, mult * model_channels, time_embed_dim, dropout)
+                ]
+                ch = mult * model_channels
+                if ds in attention_resolutions:
+                    layers.append(AttentionBlock(ch, num_heads=num_heads))
+                self.down_blocks.append(TimestepEmbedSequential(*layers))
+                down_block_chans.append(ch)
+                self.add_cond_list.append(True)
+            self.add_cond_list[-1] = False
+            if level != len(channel_mult) - 1:  # don't use downsample for the last stage
+                self.down_blocks.append(TimestepEmbedSequential(Downsample(ch, conv_resample)))
+                down_block_chans.append(ch)
+                self.add_cond_list.append(True)
+                ds *= 2
+
+        # middle block
+        self.middle_block = TimestepEmbedSequential(
+            ResidualBlock(ch, ch, time_embed_dim, dropout),
+            AttentionBlock(ch, num_heads=num_heads),
+            ResidualBlock(ch, ch, time_embed_dim, dropout)
+        )
+
+        # up blocks
+        self.up_blocks = nn.ModuleList([])
+        for level, mult in list(enumerate(channel_mult))[::-1]:
+            for i in range(num_res_blocks + 1):
+                layers = [
+                    ResidualBlock(
+                        ch + down_block_chans.pop() + gn_channels,
+                        model_channels * mult,
+                        time_embed_dim,
+                        dropout
+                    )
+                ]
+                ch = model_channels * mult
+                if ds in attention_resolutions:
+                    layers.append(AttentionBlock(ch, num_heads=num_heads))
+                if level and i == num_res_blocks:
+                    layers.append(Upsample(ch, conv_resample))
+                    ds //= 2
+                self.up_blocks.append(TimestepEmbedSequential(*layers))
+
+        self.out = nn.Sequential(
+            norm_layer(ch + gn_channels),
+            nn.SiLU(),
+            nn.Conv2d(model_channels + gn_channels, out_channels, kernel_size=3, padding=1),
+        )
+
+        self.cond_proj = nn.Conv2d(context_channels, gn_channels, kernel_size=1)
+
+    def forward(self, x, context, timesteps):
+        """
+        Apply the model to an input batch.
+        :param x: an [N x C x H x W] Tensor of inputs.
+        :param timesteps: a 1-D batch of timesteps.
+        :return: an [N x C x ...] Tensor of outputs.
+        """
+        hs = []
+        # time step embedding
+        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+
+        # down stage
+        h = x
+        for (i, module) in enumerate(self.down_blocks):
+            h = module(h, emb, context)
+            hs.append(h)
+            if self.add_cond_list[i]:
+                c_proj = self.cond_proj(F.interpolate(context, size=h.shape[-2:], mode='nearest'))
+                h = torch.cat((h, c_proj), 1)
+        # middle stage
+        h = self.middle_block(h, emb, context)
+        c_proj = self.cond_proj(F.interpolate(context, size=h.shape[-2:], mode='nearest'))
+        h = torch.cat((h, c_proj), 1)
+        # up stage
+        for module in self.up_blocks:
+            cat_in = torch.cat([h, hs.pop()], dim=1)
+            h = module(cat_in, emb, context)
+            c_proj = self.cond_proj(F.interpolate(context, size=h.shape[-2:], mode='nearest'))
+            h = torch.cat((h, c_proj), 1)
         return self.out(h)
