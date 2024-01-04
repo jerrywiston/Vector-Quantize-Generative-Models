@@ -1,3 +1,7 @@
+"""
+taken from: https://github.com/Alokia/diffusion-DDIM-pytorch
+"""
+
 from typing import Tuple
 import torch
 from torch import nn

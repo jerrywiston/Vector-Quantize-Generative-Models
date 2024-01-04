@@ -13,7 +13,7 @@ The training data is based on Maze3D environments, with the following dependanci
 
 ## Models
 ### Vector Quantize Model
-<img src="assets/vqvae.jpg" width="400"/>
+<img src="assets/vqvae.jpg" width="512"/>
 
 ```
 python train_vqvae.py
@@ -52,3 +52,12 @@ python train_transformer_condition_encdec.py
 ```
 python train_draw.py
 ```
+
+## References
+- Van Den Oord, Aaron, and Oriol Vinyals. "Neural discrete representation learning." Advances in neural information processing systems 30 (2017).
+- Esser, Patrick, Robin Rombach, and Bjorn Ommer. "Taming transformers for high-resolution image synthesis." Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. 2021.
+- Rombach, Robin, et al. "High-resolution image synthesis with latent diffusion models." Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. 2022.
+- Vaswani, Ashish, et al. "Attention is all you need." Advances in neural information processing systems 30 (2017).
+- https://github.com/karpathy/nanoGPT
+- https://github.com/dome272/VQGAN-pytorch
+- https://github.com/Alokia/diffusion-DDIM-pytorch
