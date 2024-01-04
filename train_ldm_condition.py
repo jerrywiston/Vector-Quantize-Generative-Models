@@ -33,6 +33,7 @@ vq_net.load_state_dict(torch.load(os.path.join("checkpoints", vqmodel_path)))
 # Conditional Encoder
 cond_dim = 64
 cond_net = Encoder(input_channels=1, embedding_dim=cond_dim).to(device)
+
 # Diffusion Model
 unet_config = {
     "in_channels": 8,
@@ -80,6 +81,7 @@ for iter in range(max_training_iter):
         color_data = (color_data.astype(float) / 255.)*2-1
         depth_data = depth_data.astype(float) / 5.0
         print("Done")
+    
     # Get Latent Feature
     x_obs, pose_obs, depth_obs, _, _, _ = utils.get_batch_depth(color_data, pose_data, depth_data, 1, batch_size)
     z = vq_net.encoder(x_obs).detach()
@@ -91,7 +93,7 @@ for iter in range(max_training_iter):
     loss.backward()
     optimizer.step()
 
-    if iter % 1000 == 0:
+    if iter % 100 == 0:
         print("Iter " + str(iter).zfill(5) + " | diffusion_loss: " + str(loss.item()))
 
         # Generate

@@ -75,6 +75,7 @@ for iter in range(max_training_iter):
         color_data, depth_data, pose_data = gen_dataset(env, gen_data_size, samp_range=samp_field, samp_size=10)
         color_data = (color_data.astype(float) / 255.)*2-1
         print("Done")
+    
     # Get Latent Feature
     x_obs, pose_obs, _, _ = utils.get_batch(color_data, pose_data, 1, batch_size)
     z = vq_net.encoder(x_obs).detach()
@@ -85,7 +86,7 @@ for iter in range(max_training_iter):
     loss.backward()
     optimizer.step()
 
-    if iter % 1000 == 0:
+    if iter % 100 == 0:
         print("Iter " + str(iter).zfill(5) + " | diffusion_loss: " + str(loss.item()))
 
         # Generate

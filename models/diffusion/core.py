@@ -117,14 +117,14 @@ class DDPMSampler(nn.Module):
             include intermediate pictures.
         """
         x = [x_t]
-        with tqdm(reversed(range(self.T)), colour="#6565b5", total=self.T) as sampling_steps:
-            for time_step in sampling_steps:
-                x_t = self.sample_one_step(x_t, time_step, c)
+        #with tqdm(reversed(range(self.T)), colour="#6565b5", total=self.T) as sampling_steps:
+        for time_step in reversed(range(self.T)):
+            x_t = self.sample_one_step(x_t, time_step, c)
 
-                if not only_return_x_0 and ((self.T - time_step) % interval == 0 or time_step == 0):
-                    x.append(torch.clip(x_t, -1.0, 1.0))
+            if not only_return_x_0 and ((self.T - time_step) % interval == 0 or time_step == 0):
+                x.append(torch.clip(x_t, -1.0, 1.0))
 
-                sampling_steps.set_postfix(ordered_dict={"step": time_step + 1, "sample": len(x)})
+            #sampling_steps.set_postfix(ordered_dict={"step": time_step + 1, "sample": len(x)})
 
         if only_return_x_0:
             return x_t  # [batch_size, channels, height, width]
@@ -199,14 +199,14 @@ class DDIMSampler(nn.Module):
         time_steps_prev = np.concatenate([[0], time_steps[:-1]])
 
         x = [x_t]
-        with tqdm(reversed(range(0, steps)), colour="#6565b5", total=steps) as sampling_steps:
-            for i in sampling_steps:
-                x_t = self.sample_one_step(x_t, time_steps[i], c, time_steps_prev[i], eta)
+        #with tqdm(reversed(range(0, steps)), colour="#6565b5", total=steps) as sampling_steps:
+        for i in reversed(range(0, steps)):
+            x_t = self.sample_one_step(x_t, time_steps[i], c, time_steps_prev[i], eta)
 
-                if not only_return_x_0 and ((steps - i) % interval == 0 or i == 0):
-                    x.append(torch.clip(x_t, -1.0, 1.0))
+            if not only_return_x_0 and ((steps - i) % interval == 0 or i == 0):
+                x.append(torch.clip(x_t, -1.0, 1.0))
 
-                sampling_steps.set_postfix(ordered_dict={"step": i + 1, "sample": len(x)})
+            #sampling_steps.set_postfix(ordered_dict={"step": i + 1, "sample": len(x)})
 
         if only_return_x_0:
             return x_t  # [batch_size, channels, height, width]

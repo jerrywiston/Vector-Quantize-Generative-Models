@@ -34,19 +34,22 @@ class AddPosEmb(nn.Module):
         return out
 
 class Encoder(nn.Module):
-    def __init__(self, input_channels=3, embedding_dim=64, n_hid=64):
+    def __init__(self, input_channels=3, embedding_dim=64, n_hid=64, add_pos=True):
         super().__init__()
-
+        self.add_pos = add_pos
         self.net = nn.Sequential(
             nn.Conv2d(input_channels, n_hid, 4, stride=2, padding=1),
             nn.ReLU(inplace=True),
             ResBlock(n_hid, n_hid),
         )
-        self.proj = nn.Conv2d(n_hid, embedding_dim-2, 1)
+        if add_pos:
+            self.proj = nn.Conv2d(n_hid, embedding_dim-2, 1)
+        else:
+            self.proj = nn.Conv2d(n_hid, embedding_dim, 1)
 
-    def forward(self, x, add_pos=True):
+    def forward(self, x):
         h = self.net(x)
         z = self.proj(h)
-        if add_pos:
+        if self.add_pos:
             z = AddPosEmb()(z)
         return z

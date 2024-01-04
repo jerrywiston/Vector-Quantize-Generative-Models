@@ -12,6 +12,7 @@ import torchvision.utils as vutils
 from models.vqvae import vqvae
 import utils
 
+from models.diffusion.cond_encoder import Encoder
 from models.diffusion.unet import UNetCat
 from models.diffusion.core import GaussianDiffusionTrainer, DDPMSampler, DDIMSampler
 
@@ -29,6 +30,10 @@ vqmodel_path = "vqvae.pt"
 vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
 vq_net.load_state_dict(torch.load(os.path.join("checkpoints", vqmodel_path)))
 
+# Conditional Encoder
+cond_dim = 64
+cond_net = Encoder(input_channels=1, embedding_dim=cond_dim, add_pos=False).to(device)
+
 # Diffusion Model
 unet_config = {
     "in_channels": 8,
@@ -43,7 +48,7 @@ unet_config = {
 }
 diff_config = {"T": 1000, "beta": [0.0001, 0.02]}
 
-diff_net = UNetCat(**unet_config, context_channels=1).to(device)
+diff_net = UNetCat(**unet_config, context_channels=cond_dim).to(device)
 optimizer = optim.AdamW(diff_net.parameters(), lr=0.0002, weight_decay=1e-4)
 trainer = GaussianDiffusionTrainer(diff_net, **diff_config).to(device)
 trainer.train()
@@ -76,23 +81,25 @@ for iter in range(max_training_iter):
         color_data = (color_data.astype(float) / 255.)*2-1
         depth_data = depth_data.astype(float) / 5.0
         print("Done")
+    
     # Get Latent Feature
     x_obs, pose_obs, depth_obs, _, _, _ = utils.get_batch_depth(color_data, pose_data, depth_data, 1, batch_size)
     z = vq_net.encoder(x_obs).detach()
+    c = cond_net(depth_obs)
 
     # Train Diffusion
     optimizer.zero_grad()
-    loss = trainer(z, depth_obs)
+    loss = trainer(z, c)
     loss.backward()
     optimizer.step()
 
-    if iter % 1000 == 0:
+    if iter % 100 == 0:
         print("Iter " + str(iter).zfill(5) + " | diffusion_loss: " + str(loss.item()))
 
         # Generate
         with torch.no_grad():
             z_t = torch.randn((batch_size, embedding_dim, 16, 16), device=device)
-            z_0 = sampler(z_t, depth_obs, only_return_x_0=True, interval=50, steps=100)
+            z_0 = sampler(z_t, c, only_return_x_0=True, interval=50, steps=100)
             z_q, _, _ = vq_net.quantizer(z_0)
             x_samp = vq_net.decoder(z_q)
             x_fig = (x_samp.flip(1).cpu() + 1) / 2
@@ -104,4 +111,4 @@ for iter in range(max_training_iter):
 
             # Save model
             torch.save(diff_net.state_dict(), os.path.join(save_path, model_name+".pt"))
-                    
+            torch.save(cond_net.state_dict(), os.path.join(save_path, model_name+"_condnet.pt"))
