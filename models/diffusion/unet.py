@@ -405,7 +405,7 @@ class UNetCat(nn.Module):
 
         self.cond_proj = nn.Conv2d(context_channels, gn_channels, kernel_size=1)
 
-    def forward(self, x, context, timesteps):
+    def forward(self, x, timesteps, context):
         """
         Apply the model to an input batch.
         :param x: an [N x C x H x W] Tensor of inputs.

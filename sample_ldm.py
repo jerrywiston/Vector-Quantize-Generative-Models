@@ -2,15 +2,13 @@ import numpy as np
 import os
 
 import torch
-import torch.optim as optim
 import torchvision.utils as vutils
 
 from models.vqvae import vqvae
 import utils
 
-from models.diffusion.modules.UNet import UNet
+from models.diffusion.unet import UNet
 from models.diffusion.core import DDPMSampler, DDIMSampler
-from models.diffusion.utils import load_yaml
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -24,11 +22,23 @@ vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
 vq_net.load_state_dict(torch.load(os.path.join("checkpoints","vqvae_new.pt")))
 
 # Diffusion Model
-config = load_yaml("config_ldm2.yml", encoding="utf-8")
-diff_net = UNet(**config["Model"]).to(device)
+unet_config = {
+    "in_channels": 8,
+    "out_channels": 8,
+    "model_channels": 128,
+    "attention_resolutions": [1, 2, ],
+    "num_res_blocks": 2,
+    "dropout": 0.1,
+    "channel_mult": [1, 2, 2, 2],
+    "conv_resample": True,
+    "num_heads": 4
+}
+diff_config = {"T": 1000, "beta": [0.0001, 0.02]}
+
+diff_net = UNet(**unet_config).to(device)
 diff_net.load_state_dict(torch.load(os.path.join("checkpoints","ldm.pt")))
-ddpm_sampler = DDPMSampler(diff_net, beta=[0.0001, 0.02], T=1000).to(device)
-ddim_sampler = DDIMSampler(diff_net, beta=[0.0001, 0.02], T=1000).to(device)
+ddpm_sampler = DDPMSampler(diff_net, **diff_config).to(device)
+ddim_sampler = DDIMSampler(diff_net, **diff_config).to(device)
 
 samp_size = 64
 
