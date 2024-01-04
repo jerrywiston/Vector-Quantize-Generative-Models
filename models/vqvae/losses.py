@@ -24,7 +24,7 @@ class Vgg16(nn.Module):
                     break
         return results
 
-def perceptial_loss(vggnet, x, x_gt, layer=3):
+def perceptual_loss(vggnet, x, x_gt, layer=3):
     f_x = vggnet(x, layer)
     f_x_gt = vggnet(x_gt, layer)
     loss = 0.

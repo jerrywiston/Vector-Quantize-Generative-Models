@@ -63,7 +63,7 @@ for iter in range(max_training_iter):
 
     x_hat, latent_loss, ind = net(x_obs)
     recon_loss = torch.mean((x_hat - x_obs)**2)
-    perceptual_loss = losses.perceptial_loss(vggnet, x_hat, x_obs)
+    perceptual_loss = losses.perceptual_loss(vggnet, x_hat, x_obs)
     d_loss, g_loss = losses.patch_discriminator_loss(disc, x_hat, x_obs)
     loss = recon_loss + perceptual_loss + latent_loss + g_loss
 
