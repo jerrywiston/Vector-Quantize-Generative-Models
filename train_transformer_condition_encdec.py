@@ -41,14 +41,14 @@ vq_net_cond.load_state_dict(torch.load(os.path.join("checkpoints","vqvae_depth.p
 transformer_enc_config = {
     "vocab_size": cond_n_embeddings,
     "block_size": 256, 
-    "n_layer": 6,
+    "n_layer": 4,
     "n_head": 16,
     "n_embd": 512
 }
 transformer_dec_config = {
     "vocab_size": n_embeddings,
     "block_size": 256, 
-    "n_layer": 6,
+    "n_layer": 4,
     "n_head": 16,
     "n_embd": 512
 }
@@ -74,6 +74,7 @@ if not os.path.exists(results_path):
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
+# Load trained weight
 if os.path.exists(os.path.join(save_path, model_name+".pt")):
     print("Load trained weights ...")
     vqtransformer.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))

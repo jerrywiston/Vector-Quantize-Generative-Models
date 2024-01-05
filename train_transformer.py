@@ -60,6 +60,11 @@ if not os.path.exists(results_path):
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
+# Load trained weight
+if os.path.exists(os.path.join(save_path, model_name+".pt")):
+    print("Load trained weights ...")
+    vqtransformer.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))
+
 # Training Iteration
 for iter in range(max_training_iter):
     if iter % gen_dataset_iter == 0:

@@ -22,6 +22,14 @@ python train_vqvae.py
 python train_vqvae_depth.py 
 ```
 
+Image Reconstruction Results of VQVAE
+
+<img src="assets/results_vqvae.jpg" width="300"/>
+
+Depth Reconstruction Results of VQVAE
+
+<img src="assets/results_vqvae_depth.jpg" width="300"/>
+
 ### Latent Diffusion Model 
 <img src="assets/ldm.jpg" width="400"/>
 
@@ -35,6 +43,18 @@ python train_ldm_condition.py
 python train_ldm_condition_cat.py
 ```
 
+Random Generation Results of LDM
+
+<img src="assets/results_ldm.jpg" width="300"/>
+
+Conditional Generation Results of LDM (Cross-Attention)
+
+<img src="assets/results_ldm_condition.jpg" width="300"/>
+
+Conditional Generation Results of LDM (Concatenation)
+
+<img src="assets/results_ldm_condition_cat.jpg" width="300"/>
+
 ### Transformer Generation Model
 <img src="assets/transformer.jpg" width="400"/>
 
@@ -47,6 +67,18 @@ python train_transformer_condition.py
 # Depth conditional generation (encoder-decoder)
 python train_transformer_condition_encdec.py
 ```
+
+Random Generation Results of Transformer
+
+<img src="assets/results_transformer.jpg" width="300"/>
+
+Conditional Generation Results of Transformer (Decoder-Only)
+
+<img src="assets/results_transformer_condition.jpg" width="300"/>
+
+Conditional Generation Results of Transformer (Encoder-Decoder)
+
+<img src="assets/results_transformer_condition_encdec.jpg" width="300"/>
 
 ### DRAW Model (Experimental)
 ```

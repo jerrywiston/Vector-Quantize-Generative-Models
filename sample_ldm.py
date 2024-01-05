@@ -12,14 +12,18 @@ from models.diffusion.core import DDPMSampler, DDIMSampler
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# VQVAE Model Parameters
-h_dim = 128
-n_embeddings = 1024#256
-embedding_dim = 8#3
+save_path = "checkpoints"
+exp_path = "experiments"
+model_name = "ldm"
+results_path = os.path.join(exp_path, model_name)
 
-# VQVAE Model
+# VQVAE Model 
+h_dim = 128
+n_embeddings = 1024
+embedding_dim = 8
+vqmodel_path = "vqvae.pt"
 vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
-vq_net.load_state_dict(torch.load(os.path.join("checkpoints","vqvae_new.pt")))
+vq_net.load_state_dict(torch.load(os.path.join("checkpoints", vqmodel_path)))
 
 # Diffusion Model
 unet_config = {
@@ -36,7 +40,7 @@ unet_config = {
 diff_config = {"T": 1000, "beta": [0.0001, 0.02]}
 
 diff_net = UNet(**unet_config).to(device)
-diff_net.load_state_dict(torch.load(os.path.join("checkpoints","ldm.pt")))
+diff_net.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))
 ddpm_sampler = DDPMSampler(diff_net, **diff_config).to(device)
 ddim_sampler = DDIMSampler(diff_net, **diff_config).to(device)
 
@@ -48,14 +52,14 @@ z_0 = ddpm_sampler(z_t, only_return_x_0=True, interval=50)
 z_q, _, _ = vq_net.quantizer(z_0)
 x_samp = vq_net.decoder(z_q)
 x_fig = (x_samp.flip(1).cpu() + 1) / 2
-path = os.path.join("output_ldm", "ddpm_sample.jpg")
+path = os.path.join(results_path, "ddpm_sample.jpg")
 vutils.save_image(x_fig, path, padding=2, normalize=False)
 
-print("DDPM_sample")
+print("DDIM_sample")
 z_t = torch.randn((samp_size, embedding_dim, 16, 16), device=device)
 z_0 = ddim_sampler(z_t, only_return_x_0=True, interval=50, steps=100)
 z_q, _, _ = vq_net.quantizer(z_0)
 x_samp = vq_net.decoder(z_q)
 x_fig = (x_samp.flip(1).cpu() + 1) / 2
-path = os.path.join("output_ldm", "ddim_sample.jpg")
+path = os.path.join(results_path, "ddim_sample.jpg")
 vutils.save_image(x_fig, path, padding=2, normalize=False)
