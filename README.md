@@ -1,5 +1,5 @@
 # Vector-Quantize-Generative-Models
-Implementation of vector quantize-based generative models with better readability and minimal dependencies, including vector quantize model, transformer generator (VQGAN) and diffusion model (LDM).
+Implementation of vector quantize-based generative models with good readability and minimal dependencies, including vector quantize model, transformer generator (VQGAN) and diffusion model (LDM). All models are tested under the pc with RTX 2070 GPU.
 
 ## Dependancy
 Dpendencies of the models:
@@ -56,7 +56,7 @@ Conditional Generation Results of LDM (Concatenation)
 <img src="assets/results_ldm_condition_cat.jpg" width="300"/>
 
 ### Transformer Generation Model
-<img src="assets/transformer.jpg" width="400"/>
+<img src="assets/transformer.jpg" width="512"/>
 
 ```
 python train_transformer.py

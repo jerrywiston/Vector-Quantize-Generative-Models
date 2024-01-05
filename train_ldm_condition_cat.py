@@ -78,6 +78,7 @@ if not os.path.exists(save_path):
 if os.path.exists(os.path.join(save_path, model_name+".pt")):
     print("Load trained weights ...")
     diff_net.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))
+    cond_net.load_state_dict(torch.load(os.path.join(save_path, model_name+"_condnet.pt")))
 
 # Training Iteration
 for iter in range(max_training_iter):
