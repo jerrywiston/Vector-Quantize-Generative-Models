@@ -52,6 +52,11 @@ if not os.path.exists(results_path):
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
+# Load trained weight
+if os.path.exists(os.path.join(save_path, model_name+".pt")):
+    print("Load trained weights ...")
+    draw_net.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))
+
 # Training Iteration
 for iter in range(max_training_iter):
     if iter % gen_dataset_iter == 0:
@@ -63,7 +68,7 @@ for iter in range(max_training_iter):
     x_obs, pose_obs, _, _ = utils.get_batch(color_data, pose_data, 1, batch_size)
     z = vq_net.encoder(x_obs).detach()
 
-    # Train Diffusion
+    # Train DRAW
     optimizer.zero_grad()
     z_rec, kl = draw_net(z)
     loss = nn.MSELoss()(z, z_rec) + 0.001*kl
@@ -78,9 +83,9 @@ for iter in range(max_training_iter):
             z_samp = draw_net.sample(z_shape=(16,16), batch_size=32)
             z_q, _, _ = vq_net.quantizer(z_samp)
             x_samp = vq_net.decoder(z_q)
-            x_fig = x_samp.flip(1).cpu()
+            x_fig = (x_samp.flip(1).cpu() + 1) / 2
             path = os.path.join(results_path, str(iter).zfill(4)+".jpg")
-            vutils.save_image(x_fig, path, padding=2, normalize=True)
+            vutils.save_image(x_fig, path, padding=2, normalize=False)
 
             # Save model
             torch.save(draw_net.state_dict(), os.path.join(save_path, model_name+".pt"))

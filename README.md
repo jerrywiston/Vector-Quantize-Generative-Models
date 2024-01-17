@@ -80,10 +80,21 @@ Conditional Generation Results of Transformer (Encoder-Decoder)
 
 <img src="assets/results_transformer_condition_encdec.jpg" width="300"/>
 
-### DRAW Model (Experimental)
+### Latent DRAW Model (Experimental)
 ```
 python train_draw.py
+
+# Depth conditional generation
+python train_draw_condition.py
 ```
+
+Random Generation Results of DRAW
+
+<img src="assets/results_draw.jpg" width="300"/>
+
+Conditional Generation Results of DRAW
+
+<img src="assets/results_draw_condition.jpg" width="300"/>
 
 ## References
 - Van Den Oord, Aaron, and Oriol Vinyals. "Neural discrete representation learning." Advances in neural information processing systems 30 (2017).

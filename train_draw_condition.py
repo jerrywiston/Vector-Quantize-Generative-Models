@@ -6,13 +6,13 @@ from maze3d import maze_env
 from maze3d.gen_maze_dataset_new import gen_dataset
 
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import torchvision.utils as vutils
 
 from models.vqvae import vqvae
+from models.draw import generator
 from models.diffusion.cond_encoder import Encoder
-from models.diffusion.unet import UNet
-from models.diffusion.core import GaussianDiffusionTrainer, DDPMSampler, DDIMSampler
 
 import utils
 
@@ -22,38 +22,21 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 maze_obj = maze.MazeGridRandom2(obj_prob=0.3)
 env = maze_env.MazeBaseEnv(maze_obj, render_res=(64,64), fov=80*np.pi/180)
 
-# VQVAE Model 
+# VQVAE Model
 h_dim = 128
 n_embeddings = 1024
 embedding_dim = 8
 vqmodel_path = "vqvae.pt"
 vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
-vq_net.load_state_dict(torch.load(os.path.join("checkpoints", vqmodel_path)))
+vq_net.load_state_dict(torch.load(os.path.join("checkpoints",vqmodel_path)))
 
 # Conditional Encoder
 cond_dim = 64
-cond_net = Encoder(input_channels=1, embedding_dim=cond_dim).to(device)
+cond_net = Encoder(input_channels=1, embedding_dim=cond_dim, add_pos=False).to(device)
 
-# Diffusion Model
-unet_config = {
-    "in_channels": 8,
-    "out_channels": 8,
-    "model_channels": 128,
-    "attention_resolutions": [1, 2, ],
-    "num_res_blocks": 2,
-    "dropout": 0.1,
-    "channel_mult": [1, 2, 2, 2],
-    "conv_resample": True,
-    "num_heads": 4
-}
-diff_config = {"T": 1000, "beta": [0.0001, 0.02]}
-
-diff_net = UNet(**unet_config, context_channels=cond_dim).to(device)
-optimizer = optim.AdamW(diff_net.parameters(), lr=0.0002, weight_decay=1e-4)
-trainer = GaussianDiffusionTrainer(diff_net, **diff_config).to(device)
-trainer.train()
-sampler = DDIMSampler(diff_net, **diff_config).to(device)
-#sampler = DDPMSampler(diff_net, **diff_config).to(device)
+# DRAW Model
+draw_net = generator.CondGeneratorNetwork(x_dim=embedding_dim, z_dim=32, h_dim=128, c_dim=cond_dim, L=6, share=True).to(device)
+optimizer = optim.AdamW(draw_net.parameters(), lr=0.0002, weight_decay=1e-4)
 
 # Training Parameters
 max_training_iter = 100001
@@ -64,7 +47,7 @@ batch_size = 32
 
 save_path = "checkpoints"
 exp_path = "experiments"
-model_name = "ldm_cond"
+model_name = "draw_cond"
 results_path = os.path.join(exp_path, model_name)
 
 if not os.path.exists(exp_path):
@@ -77,7 +60,7 @@ if not os.path.exists(save_path):
 # Load trained weight
 if os.path.exists(os.path.join(save_path, model_name+".pt")):
     print("Load trained weights ...")
-    diff_net.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))
+    draw_net.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))
     cond_net.load_state_dict(torch.load(os.path.join(save_path, model_name+"_condnet.pt")))
 
 # Training Iteration
@@ -92,21 +75,21 @@ for iter in range(max_training_iter):
     x_obs, pose_obs, depth_obs, _, _, _ = utils.get_batch_depth(color_data, pose_data, depth_data, 1, batch_size)
     z = vq_net.encoder(x_obs).detach()
     c = cond_net(depth_obs)
-    print(c.shape)
-    # Train Diffusion
+
+    # Train DRAW
     optimizer.zero_grad()
-    loss = trainer(z, c)
+    z_rec, kl = draw_net(z, c)
+    loss = nn.MSELoss()(z, z_rec) + 0.001*kl
     loss.backward()
     optimizer.step()
 
     if iter % 100 == 0:
-        print("Iter " + str(iter).zfill(5) + " | diffusion_loss: " + str(loss.item()))
+        print("Iter " + str(iter).zfill(5) + " | draw_loss: " + str(loss.item()))
 
         # Generate
         with torch.no_grad():
-            z_t = torch.randn((batch_size, embedding_dim, 16, 16), device=device)
-            z_0 = sampler(z_t, c, only_return_x_0=True, interval=50, steps=100)
-            z_q, _, _ = vq_net.quantizer(z_0)
+            z_samp = draw_net.sample(z_shape=(16,16), c=c)
+            z_q, _, _ = vq_net.quantizer(z_samp)
             x_samp = vq_net.decoder(z_q)
             x_fig = (x_samp.flip(1).cpu() + 1) / 2
             gt_fig = (x_obs.flip(1).cpu() + 1) / 2
@@ -116,6 +99,5 @@ for iter in range(max_training_iter):
             vutils.save_image(out_fig, path, padding=2, normalize=False)
 
             # Save model
-            torch.save(diff_net.state_dict(), os.path.join(save_path, model_name+".pt"))
+            torch.save(draw_net.state_dict(), os.path.join(save_path, model_name+".pt"))
             torch.save(cond_net.state_dict(), os.path.join(save_path, model_name+"_condnet.pt"))
-        
