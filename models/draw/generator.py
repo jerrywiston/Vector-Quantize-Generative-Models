@@ -1,20 +1,11 @@
 """
-The inference-generator architecture is conceptually
-similar to the encoder-decoder pair seen in variational
-autoencoders. The difference here is that the model
-must infer latents from a cascade of time-dependent inputs
-using convolutional and recurrent networks.
-Additionally, a representation vector is shared between
-the networks.
 Modified by https://github.com/wohlert/generative-query-network-pytorch/blob/master/gqn/generator.py
 """
-#SCALE = 4 # Scale of image generation process
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal, kl_divergence
-from padding_same_conv import Conv2d
 
 class UNet(nn.Module):
     def __init__(self, in_channels, out_channels, ch=64):
@@ -50,12 +41,11 @@ class UNet(nn.Module):
 class ConvGRUCell(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
         super(ConvGRUCell, self).__init__()
-        kwargs = dict(kernel_size=kernel_size, stride=stride)
         in_channels += out_channels
         
-        self.reset_conv = Conv2d(in_channels, out_channels, **kwargs)
-        self.update_conv = Conv2d(in_channels, out_channels, **kwargs)
-        self.state_conv = Conv2d(in_channels, out_channels, **kwargs)
+        self.reset_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.update_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.state_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, input, state):
         input_cat1 = torch.cat((state, input), dim=1)
@@ -68,16 +58,15 @@ class ConvGRUCell(nn.Module):
         return state_update 
 
 class UNetGRUCell(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
-        kwargs = dict(kernel_size=kernel_size, stride=stride)
         in_channels += out_channels
         self.unet_gate = UNet(in_channels, out_channels*2)
         self.unet_state = UNet(in_channels, out_channels)
 
-        self.reset_conv = Conv2d(in_channels, out_channels, **kwargs)
-        self.update_conv = Conv2d(in_channels, out_channels, **kwargs)
-        self.state_conv = Conv2d(in_channels, out_channels, **kwargs)
+        self.reset_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.update_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.state_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, input, state):
         input_cat1 = torch.cat((state, input), dim=1)
@@ -91,23 +80,12 @@ class UNetGRUCell(nn.Module):
         return state_update 
 
 class GeneratorNetwork(nn.Module):
-    """
-    Network similar to a convolutional variational
-    autoencoder that refines the generated image
-    over a number of iterations.
-    :param x_dim: number of channels in input
-    :param z_dim: latent channels
-    :param h_dim: hidden channels in LSTM
-    :param L: number of density refinements
-    :param share: whether to share cores across refinements
-    """
-    def __init__(self, x_dim,  z_dim=32, h_dim=128, L=6, scale=1, share=True):
+    def __init__(self, x_dim, z_dim=32, h_dim=128, L=6, share=True):
         super(GeneratorNetwork, self).__init__()
         self.L = L
         self.z_dim = z_dim
         self.h_dim = h_dim
         self.share = share
-        self.scale = scale
 
         # Core computational units
         inference_args = dict(in_channels=h_dim + x_dim, out_channels=h_dim)
@@ -124,27 +102,18 @@ class GeneratorNetwork(nn.Module):
         self.prior_density     = nn.Conv2d(h_dim, 2*z_dim, kernel_size=3, padding=1)
 
         # Generative density
-        self.observation_density = Conv2d(h_dim, x_dim, kernel_size=1, stride=1, padding=0)
-
-        self.upsample = nn.ConvTranspose2d(h_dim, h_dim, kernel_size=self.scale, stride=self.scale, padding=0, bias=False)
-        self.downsample = Conv2d(x_dim, x_dim, kernel_size=self.scale, stride=self.scale, padding=0, bias=False)
+        self.in_proj = nn.Conv2d(x_dim, x_dim, kernel_size=1)
+        self.out_proj = nn.Conv2d(h_dim, x_dim, kernel_size=1)
+        self.draw_proj = nn.Conv2d(h_dim, h_dim, kernel_size=1)
 
     def forward(self, x):
-        """
-        Attempt to reconstruct x with corresponding
-        viewpoint v and context representation r.
-        :param x: image to send through
-        :param v: viewpoint of image
-        :return reconstruction of x and kl-divergence
-        """
         batch_size, _, h, w = x.shape
         kl = 0
-        x = self.downsample(x)
+        x = self.in_proj(x)
 
         # Reset hidden and cell state
-        self.scale = 1
-        hidden_i = x.new_zeros((batch_size, self.h_dim, h // self.scale, w // self.scale))
-        hidden_g = x.new_zeros((batch_size, self.h_dim, h // self.scale, w // self.scale))
+        hidden_i = x.new_zeros((batch_size, self.h_dim, h, w))
+        hidden_g = x.new_zeros((batch_size, self.h_dim, h, w))
 
         # Canvas for updating
         u = x.new_zeros((batch_size, self.h_dim, h, w))
@@ -170,28 +139,21 @@ class GeneratorNetwork(nn.Module):
             hidden_g = generator(z, hidden_g)
 
             # Calculate u
-            u = self.upsample(hidden_g) + u
+            u = self.draw_proj(hidden_g) + u
 
             # Calculate KL-divergence
             kl += kl_divergence(posterior_distribution, prior_distribution)
 
-        x_mu = self.observation_density(u)
+        x_mu = self.out_proj(u)
         kl = torch.mean(torch.sum(kl, dim=[1,2,3]))
         return x_mu, kl
 
     def sample(self, z_shape, batch_size, noise=True):
-        """
-        Sample from the prior distribution to generate
-        a new image given a viewpoint and representation
-        :param x_shape: (height, width) of image
-        :param v: viewpoint
-        :param r: representation (context)
-        """
         h, w = z_shape
 
         # Reset hidden and cell state for generator
         device = next(self.parameters()).device
-        hidden_g = torch.zeros((batch_size, self.h_dim, h // self.scale, w // self.scale), device=device)
+        hidden_g = torch.zeros((batch_size, self.h_dim, h, w), device=device)
 
         u = torch.zeros((batch_size, self.h_dim, h, w), device=device)
 
@@ -208,24 +170,12 @@ class GeneratorNetwork(nn.Module):
             # Calculate u
             generator = self.generator_core if self.share else self.generator_core[l]
             hidden_g = generator(z, hidden_g)
-            u = self.upsample(hidden_g) + u
-            #u = hidden_g + u
+            u = self.draw_proj(hidden_g) + u
 
-        x_mu = self.observation_density(u)
+        x_mu = self.out_proj(u)
         return x_mu
 
 class CondGeneratorNetwork(nn.Module):
-    """
-    Network similar to a convolutional variational
-    autoencoder that refines the generated image
-    over a number of iterations.
-    :param x_dim: number of channels in input
-    :param r_dim: dimensions of representation
-    :param z_dim: latent channels
-    :param h_dim: hidden channels in LSTM
-    :param L: number of density refinements
-    :param share: whether to share cores across refinements
-    """
     def __init__(self, x_dim, c_dim, z_dim=32, h_dim=128, L=6, scale=1, share=True):
         super(CondGeneratorNetwork, self).__init__()
         self.L = L
@@ -249,30 +199,20 @@ class CondGeneratorNetwork(nn.Module):
         self.prior_density     = nn.Conv2d(h_dim, 2*z_dim, kernel_size=3, padding=1)
 
         # Generative density
-        self.observation_density = Conv2d(h_dim, x_dim, kernel_size=1, stride=1, padding=0)
-
-        self.upsample = nn.ConvTranspose2d(h_dim, h_dim, kernel_size=self.scale, stride=self.scale, padding=0, bias=False)
-        self.downsample = Conv2d(x_dim, x_dim, kernel_size=self.scale, stride=self.scale, padding=0, bias=False)
-
+        self.in_proj = nn.Conv2d(x_dim, x_dim, kernel_size=1)
+        self.out_proj = nn.Conv2d(h_dim, x_dim, kernel_size=1)
+        self.draw_proj = nn.Conv2d(h_dim, h_dim, kernel_size=1)
+        
     def forward(self, x, c):
-        """
-        Attempt to reconstruct x with corresponding
-        viewpoint v and context representation r.
-        :param x: image to send through
-        :param v: viewpoint of image
-        :param r: representation for image
-        :return reconstruction of x and kl-divergence
-        """
         batch_size, _, h, w = x.shape
         kl = 0
 
         # Downsample x, upsample v and r
-        x = self.downsample(x)
+        x = self.in_proj(x)
 
         # Reset hidden and cell state
-        self.scale = 1
-        hidden_i = x.new_zeros((batch_size, self.h_dim, h // self.scale, w // self.scale))
-        hidden_g = x.new_zeros((batch_size, self.h_dim, h // self.scale, w // self.scale))
+        hidden_i = x.new_zeros((batch_size, self.h_dim, h, w))
+        hidden_g = x.new_zeros((batch_size, self.h_dim, h, w))
 
         # Canvas for updating
         u = x.new_zeros((batch_size, self.h_dim, h, w))
@@ -284,7 +224,8 @@ class CondGeneratorNetwork(nn.Module):
 
             # Inference state update
             inference = self.inference_core if self.share else self.inference_core[l]
-            hidden_i = inference(torch.cat([hidden_g, x, F.interpolate(c, size=x.shape[-2:], mode='nearest')], dim=1), hidden_i)
+            cond_inf = F.interpolate(c, size=x.shape[-2:], mode='nearest')
+            hidden_i = inference(torch.cat([hidden_g, x, cond_inf], dim=1), hidden_i)
 
             # Posterior factor (eta e network)
             q_mu, q_std = torch.chunk(self.posterior_density(hidden_i), 2, dim=1)
@@ -295,31 +236,25 @@ class CondGeneratorNetwork(nn.Module):
 
             # Generator state update
             generator = self.generator_core if self.share else self.generator_core[l]
-            hidden_g = generator(torch.cat([z, F.interpolate(c, size=z.shape[-2:], mode='nearest')], dim=1), hidden_g)
+            cond_gen = F.interpolate(c, size=z.shape[-2:], mode='nearest')
+            hidden_g = generator(torch.cat([z, cond_gen], dim=1), hidden_g)
 
             # Calculate u
-            u = self.upsample(hidden_g) + u
+            u = self.draw_proj(hidden_g) + u
 
             # Calculate KL-divergence
             kl += kl_divergence(posterior_distribution, prior_distribution)
 
-        x_mu = self.observation_density(u)
+        x_mu = self.out_proj(u)
         kl = torch.mean(torch.sum(kl, dim=[1,2,3]))
         return x_mu, kl
 
     def sample(self, z_shape, c, noise=True):
-        """
-        Sample from the prior distribution to generate
-        a new image given a viewpoint and representation
-        :param z_shape: (height, width) of image
-        :param v: viewpoint
-        :param r: representation (context)
-        """
         h, w = z_shape
         batch_size = c.size(0)
 
         # Reset hidden and cell state for generator
-        hidden_g = c.new_zeros((batch_size, self.h_dim, h // self.scale, w // self.scale))
+        hidden_g = c.new_zeros((batch_size, self.h_dim, h, w))
 
         u = c.new_zeros((batch_size, self.h_dim, h, w))
 
@@ -335,10 +270,10 @@ class CondGeneratorNetwork(nn.Module):
 
             # Calculate u
             generator = self.generator_core if self.share else self.generator_core[l]
-            hidden_g = generator(torch.cat([z, F.interpolate(c, size=z.shape[-2:], mode='nearest')], dim=1), hidden_g)
-            u = self.upsample(hidden_g) + u
+            cond_gen = F.interpolate(c, size=z.shape[-2:], mode='nearest')
+            hidden_g = generator(torch.cat([z, cond_gen], dim=1), hidden_g)
+            u = self.draw_proj(hidden_g) + u
 
-        x_mu = self.observation_density(u)
-        
+        x_mu = self.out_proj(u)
         return x_mu
     

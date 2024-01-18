@@ -76,7 +76,7 @@ for iter in range(max_training_iter):
     optimizer.step()
 
     if iter % 100 == 0:
-        print("Iter " + str(iter).zfill(5) + " | draw_loss: " + str(loss.item()))
+        print("Iter " + str(iter).zfill(5) + " | draw_loss: " + str(loss.item())+ " | kl: " + str(kl.item()))
 
         # Generate
         with torch.no_grad():
